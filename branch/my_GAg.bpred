@@ -1,0 +1,54 @@
+/*
+ * @Author: Wang Zongwu
+ * @Date: 2022-03-22 18:24:33
+ * @LastEditTime: 2022-03-22 23:21:23
+ * @LastEditors: Wang Zongwu
+ * @Description: Implementation of Two-Level Adaption Branch Prediction with GAg configuration.
+ * @FilePath: /tmp/home/wzw/Documents/ACA_Proj/Tools/ChampSim/branch/my_GAg.bpred
+ * @Mail: wangzongwu@sjtu.edu.cn
+ * Please ask for permission before quote the code.
+ */
+#include "ooo_cpu.h"
+#include <math.h>
+
+// #define BIMODAL_TABLE_SIZE 16384
+// #define BIMODAL_PRIME 16381
+// #define MAX_COUNTER 3
+// int bimodal_table[NUM_CPUS][BIMODAL_TABLE_SIZE];
+
+#define HISTORY_REGISTER_WIDTH  14
+#define MAX_COUNTER 3
+
+const size_t        pattern_table_entries = pow(2, HISTORY_REGISTER_WIDTH);
+size_t              history_register[NUM_CPUS];
+size_t              pattern_table[NUM_CPUS][pattern_table_entries];
+const size_t        history_register_mask = pattern_table_entries;
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Two-Level adaptive branch predictor with GAg configuration" << endl;
+
+	history_register[cpu] = 0;
+    for(int i = 0; i < pattern_table_entries; i++)
+        pattern_table[cpu][i] = 1;
+}
+
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+    size_t pt_index = history_register[cpu] & history_register_mask;
+    uint8_t prediction = (pattern_table[cpu][pt_index] >= ((MAX_COUNTER + 1)/2)) ? 1 : 0;
+
+    return prediction;
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+    size_t pt_index = history_register[cpu] & history_register_mask;
+
+    if (taken && (pattern_table[cpu][pt_index] < MAX_COUNTER))
+        pattern_table[cpu][pt_index]++;
+    else if ((taken == 0) && (pattern_table[cpu][pt_index] > 0))
+        pattern_table[cpu][pt_index]--;
+
+    history_register[cpu] = history_register[cpu] << 1 + taken;
+}

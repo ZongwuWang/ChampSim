@@ -5,23 +5,25 @@
 #include "uncore.h"
 #include <fstream>
 
-uint8_t warmup_complete[NUM_CPUS], 
-        simulation_complete[NUM_CPUS], 
-        all_warmup_complete = 0, 
-        all_simulation_complete = 0,
-        MAX_INSTR_DESTINATIONS = NUM_INSTR_DESTINATIONS,
+uint8_t warmup_complete[NUM_CPUS],                              // indicate the warmup ending of each cpu
+        simulation_complete[NUM_CPUS],                          // indicate the simulation ending of each cpu
+        all_warmup_complete = 0,                                // indicate the warmup ending of all cpus
+        all_simulation_complete = 0,                            // indicate the simulation ending of all cpus
+        MAX_INSTR_DESTINATIONS = NUM_INSTR_DESTINATIONS,        // 
         knob_cloudsuite = 0,
         knob_low_bandwidth = 0;
 
-uint64_t warmup_instructions     = 1000000,
-         simulation_instructions = 10000000,
-         champsim_seed;
+uint64_t warmup_instructions     = 1000000,                     // warmup instructions number
+         simulation_instructions = 10000000,                    // simulation instruction numbers
+         champsim_seed;                                         //
 
 time_t start_time;
 
 // PAGE TABLE
 uint32_t PAGE_TABLE_LATENCY = 0, SWAP_LATENCY = 0;
+// C++队列Queue是一种容器适配器，它给予程序员一种先进先出(FIFO)的数据结构。https://blog.csdn.net/cindywry/article/details/51919282
 queue <uint64_t > page_queue;
+// map是STL的一个关联容器，它提供一对一的hash。https://blog.csdn.net/sevenjoin/article/details/81943864
 map <uint64_t, uint64_t> page_table, inverse_table, recent_page, unique_cl[NUM_CPUS];
 uint64_t previous_ppage, num_adjacent_page, num_cl[NUM_CPUS], allocated_pages, num_page[NUM_CPUS], minor_fault[NUM_CPUS], major_fault[NUM_CPUS];
 
@@ -500,8 +502,42 @@ void cpu_l1i_prefetcher_cache_fill(uint32_t cpu_num, uint64_t addr, uint32_t set
 int main(int argc, char** argv)
 {
 	// interrupt signal hanlder
+    /*
+    http://c.biancheng.net/cpp/html/1142.html
+    https://blog.csdn.net/weibo1230123/article/details/81411827
+    头文件：#include <signal.h>
+    定义函数：int sigaction(int signum, 
+                           const struct sigaction *act,
+                           struct sigaction *oldact);
+    函数说明：sigaction()会依参数signum指定的信号编号来设置该信号的处理函数。参数signum可以指定SIGKILL和SIGSTOP以外的所有信号。
+
+    参数结构sigaction定义如下：
+    struct sigaction {
+    void (*sa_handler)(int);
+    void (*sa_sigaction)(int, siginfo_t *, void *);
+    sigset_t sa_mask;
+    int sa_flags;
+    void (*sa_restorer)(void);
+    }
+    1、sa_handler 此参数和signal()的参数handler 相同, 代表新的信号处理函数, 其他意义请参考signal().
+    2、sa_mask 用来设置在处理该信号时暂时将sa_mask 指定的信号搁置.
+    3、sa_restorer 此参数没有使用.
+    4、sa_flags 用来设置信号处理的其他相关操作, 下列的数值可用：
+       A_NOCLDSTOP: 如果参数signum 为SIGCHLD, 则当子进程暂停时并不会通知父进程
+       SA_ONESHOT/SA_RESETHAND: 当调用新的信号处理函数前, 将此信号处理方式改为系统预设的方式.
+       SA_RESTART: 被信号中断的系统调用会自行重启
+       SA_NOMASK/SA_NODEFER: 在处理此信号未结束前不理会此信号的再次到来. 如果参数oldact 不是NULL 指针, 则原来的信号处理方式会由此结构sigaction 返回.
+
+    返回值：执行成功则返回0, 如果有错误则返回-1.
+    */
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = signal_handler;
+    /*
+    头文件：#include <signal.h>
+    定义函数：int sigemptyset(sigset_t *set);
+    函数说明：sigemptyset()用来将参数set信号集初始化并清空
+    返回值：执行成功则返回0，如果有错则返回-1.
+    */
 	sigemptyset(&sigIntHandler.sa_mask);
 	sigIntHandler.sa_flags = 0;
 	sigaction(SIGINT, &sigIntHandler, NULL);
@@ -528,7 +564,40 @@ int main(int argc, char** argv)
         };
 
         int option_index = 0;
+        /*
+        https://blog.csdn.net/pengrui18/article/details/8078813
+        int getopt_long_only (int ___argc, 
+                              char *const *___argv,  
+                              const char *__shortopts,  
+                              const struct option *__longopts, 
+                              int *__longind); 
+        argc, argv：直接从main函数传递而来
+        shortopts：短选项字符串。如”n:v"，这里需要指出的是，短选项字符串不需要‘-’，而且但选项需要传递参数时，在短选项后面加上“：”。
+        longopts：struct option 数组，用于存放长选项参数。
+        longind：用于返回长选项在longopts结构体数组中的索引值，用于调试。一般置为NULL
+        struct option介绍：
+            struct option  
+            {  
+            const char *name;//长选项名  
+            int has_arg;//是否需要参数  
+            int *flag;  
+            int val;  
+            };  
+            name：长选项名字
+            has_arg:是否需要参数。值有三种情况
 
+                # define no_argument        0    //不需要参数  
+                # define required_argument  1    //必须指定参数  
+                # define optional_argument  2    //参数可选
+            flag和val相互依赖，主要分两种情况：
+                （1）、flag为NULL，val值用于确定该长选项，所以需要为长选项指定唯一的val值。这里也为长选项和短选项建立了桥梁。
+                （2）、flag不为NULL，则将val值存放到flag所指向的存储空间，用于标识该长选项出现过。
+        返回值：
+            1. 程序中使用短选项，则返回短选项字符（如‘n'），当需要参数是，则在返回之前将参数存入到optarg中。
+            2. 程序中使用长选项，返回值根据flag和val确定。当flag为NULL，则返回val值。所以根据val值做不同的处理，这也说明了val必须唯一。当val值等于短选项值，则可以使用短选项解析函数解析长选项；当flag不为NULL，则将val值存入flag所指向的存储空间，getopt_long返回0
+            3. 出现未定义的长选项或者短选项，getopt_long返回？
+            4. 解析完毕，getopt_long返回-1
+        */
         c = getopt_long_only(argc, argv, "wihsb", long_options, &option_index);
 
         // no more option characters
@@ -579,9 +648,9 @@ int main(int argc, char** argv)
         DRAM_MTPS = DRAM_IO_FREQ;
 
     // DRAM access latency
-    tRP  = (uint32_t)((1.0 * tRP_DRAM_NANOSECONDS  * CPU_FREQ) / 1000); 
-    tRCD = (uint32_t)((1.0 * tRCD_DRAM_NANOSECONDS * CPU_FREQ) / 1000); 
-    tCAS = (uint32_t)((1.0 * tCAS_DRAM_NANOSECONDS * CPU_FREQ) / 1000); 
+    tRP  = (uint32_t)((1.0 * tRP_DRAM_NANOSECONDS  * CPU_FREQ) / 1000);         // 发送指令时间
+    tRCD = (uint32_t)((1.0 * tRCD_DRAM_NANOSECONDS * CPU_FREQ) / 1000);         // 激活行时间
+    tCAS = (uint32_t)((1.0 * tCAS_DRAM_NANOSECONDS * CPU_FREQ) / 1000);         // Column read/restore时间
 
     // default: 16 = (64 / 8) * (3200 / 1600)
     // it takes 16 CPU cycles to tranfser 64B cache block on a 8B (64-bit) bus 
@@ -706,7 +775,7 @@ int main(int argc, char** argv)
         // TLBs
         ooo_cpu[i].ITLB.cpu = i;
         ooo_cpu[i].ITLB.cache_type = IS_ITLB;
-	ooo_cpu[i].ITLB.MAX_READ = 2;
+	    ooo_cpu[i].ITLB.MAX_READ = 2;
         ooo_cpu[i].ITLB.fill_level = FILL_L1;
         ooo_cpu[i].ITLB.extra_interface = &ooo_cpu[i].L1I;
         ooo_cpu[i].ITLB.lower_level = &ooo_cpu[i].STLB; 
@@ -734,8 +803,8 @@ int main(int argc, char** argv)
         ooo_cpu[i].L1I.fill_level = FILL_L1;
         ooo_cpu[i].L1I.lower_level = &ooo_cpu[i].L2C; 
         ooo_cpu[i].l1i_prefetcher_initialize();
-	ooo_cpu[i].L1I.l1i_prefetcher_cache_operate = cpu_l1i_prefetcher_cache_operate;
-	ooo_cpu[i].L1I.l1i_prefetcher_cache_fill = cpu_l1i_prefetcher_cache_fill;
+	    ooo_cpu[i].L1I.l1i_prefetcher_cache_operate = cpu_l1i_prefetcher_cache_operate;
+	    ooo_cpu[i].L1I.l1i_prefetcher_cache_fill = cpu_l1i_prefetcher_cache_fill;
 
         ooo_cpu[i].L1D.cpu = i;
         ooo_cpu[i].L1D.cache_type = IS_L1D;
@@ -808,43 +877,43 @@ int main(int argc, char** argv)
             // core might be stalled due to page fault or branch misprediction
             if (stall_cycle[i] <= current_core_cycle[i]) {
 
-	      // retire
-	      if ((ooo_cpu[i].ROB.entry[ooo_cpu[i].ROB.head].executed == COMPLETED) && (ooo_cpu[i].ROB.entry[ooo_cpu[i].ROB.head].event_cycle <= current_core_cycle[i]))
-		ooo_cpu[i].retire_rob();
+                // retire
+                if ((ooo_cpu[i].ROB.entry[ooo_cpu[i].ROB.head].executed == COMPLETED) && (ooo_cpu[i].ROB.entry[ooo_cpu[i].ROB.head].event_cycle <= current_core_cycle[i]))
+                ooo_cpu[i].retire_rob();
 
-	      // complete 
-	      ooo_cpu[i].update_rob();
+                // complete 
+                ooo_cpu[i].update_rob();
 
-	      // schedule
-	      uint32_t schedule_index = ooo_cpu[i].ROB.next_schedule;
-	      if ((ooo_cpu[i].ROB.entry[schedule_index].scheduled == 0) && (ooo_cpu[i].ROB.entry[schedule_index].event_cycle <= current_core_cycle[i]))
-		ooo_cpu[i].schedule_instruction();
-	      // execute
-	      ooo_cpu[i].execute_instruction();
+                // schedule
+                uint32_t schedule_index = ooo_cpu[i].ROB.next_schedule;
+                if ((ooo_cpu[i].ROB.entry[schedule_index].scheduled == 0) && (ooo_cpu[i].ROB.entry[schedule_index].event_cycle <= current_core_cycle[i]))
+                ooo_cpu[i].schedule_instruction();
+                // execute
+                ooo_cpu[i].execute_instruction();
 
-	      ooo_cpu[i].update_rob();
+                ooo_cpu[i].update_rob();
 
-	      // memory operation
-	      ooo_cpu[i].schedule_memory_instruction();
-	      ooo_cpu[i].execute_memory_instruction();
+                // memory operation
+                ooo_cpu[i].schedule_memory_instruction();
+                ooo_cpu[i].execute_memory_instruction();
 
-	      ooo_cpu[i].update_rob();
+                ooo_cpu[i].update_rob();
 
-	      // decode
-	      if(ooo_cpu[i].DECODE_BUFFER.occupancy > 0)
-		{
-		  ooo_cpu[i].decode_and_dispatch();
-		}
-	      
-	      // fetch
-	      ooo_cpu[i].fetch_instruction();
-	      
-	      // read from trace
-	      if ((ooo_cpu[i].IFETCH_BUFFER.occupancy < ooo_cpu[i].IFETCH_BUFFER.SIZE) && (ooo_cpu[i].fetch_stall == 0))
-		{
-		  ooo_cpu[i].read_from_trace();
-		}
-	    }
+                // decode
+                if(ooo_cpu[i].DECODE_BUFFER.occupancy > 0)
+                {
+                ooo_cpu[i].decode_and_dispatch();
+                }
+                
+                // fetch
+                ooo_cpu[i].fetch_instruction();
+                
+                // read from trace
+                if ((ooo_cpu[i].IFETCH_BUFFER.occupancy < ooo_cpu[i].IFETCH_BUFFER.SIZE) && (ooo_cpu[i].fetch_stall == 0))
+                {
+                ooo_cpu[i].read_from_trace();
+                }
+            }
 
             // heartbeat information
             if (show_heartbeat && (ooo_cpu[i].num_retired >= ooo_cpu[i].next_print_instruction)) {

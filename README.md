@@ -136,3 +136,9 @@ ChampSim measures the IPC (Instruction Per Cycle) value as a performance metric.
 There are some other useful metrics printed out at the end of simulation. <br>
 
 Good luck and be a champion! <br>
+
+
+## gdb调试
+
+1. gdb ./bin/<executable>
+2. set args -warmup_instructions 1000000 -simulation_instructions 10000000 -traces dpc3_traces/602.gcc_s-734B.champsimtrace.xz

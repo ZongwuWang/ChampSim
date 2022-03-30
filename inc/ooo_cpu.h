@@ -224,6 +224,7 @@ class O3_CPU {
   int prefetch_code_line(uint64_t pf_v_addr); 
 };
 
+// extern是一个关键字，它告诉编译器存在着一个变量或者一个函数，如果在当前编译语句的前面中没有找到相应的变量或者函数，也会在当前文件的后面或者其它文件中定义
 extern O3_CPU ooo_cpu[NUM_CPUS];
 
 #endif

@@ -1,0 +1,78 @@
+/*
+ * @Author: Wang Zongwu
+ * @Date: 2022-03-22 18:24:33
+ * @LastEditTime: 2022-03-23 03:38:23
+ * @LastEditors: Wang Zongwu
+ * @Description: Implementation of Two-Level Adaption Branch Prediction with PAg configuration, and the IHRT is implemented with associated cache with LRU replacement policy. The difference between IHRT and AHRT is the infinit HRT entries.
+ * @FilePath: /tmp/home/wzw/Documents/ACA_Proj/Tools/ChampSim/branch/my_PAg_IHRT.bpred
+ * @Mail: wangzongwu@sjtu.edu.cn
+ * Please ask for permission before quote the code.
+ */
+#include "ooo_cpu.h"
+#include "lru_cache.h"
+#include <math.h>
+
+// #define BIMODAL_TABLE_SIZE 16384
+// #define BIMODAL_PRIME 16381
+// #define MAX_COUNTER 3
+// int bimodal_table[NUM_CPUS][BIMODAL_TABLE_SIZE];
+
+#define HISTORY_REGISTER_ENTRIES    pow(2, 20)      // dynamic adjust entries is better, but set a large enough value for simplication
+#define HISTORY_REGISTER_WIDTH      14
+#define MAX_COUNTER 3
+
+const size_t        pattern_table_entries = pow(2, HISTORY_REGISTER_WIDTH);
+// size_t              history_register[NUM_CPUS][HISTORY_REGISTER_ENTRIES];
+size_t              pattern_table[NUM_CPUS][pattern_table_entries];
+const size_t        history_register_mask = pattern_table_entries - 1;
+
+void *lruAHRT[NUM_CPUS];
+
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Two-Level adaptive branch predictor with PAg and LRU configuration" << endl;
+
+    if (LRUCacheCreate(HISTORY_REGISTER_ENTRIES, &lruAHRT[cpu]) != 0) {
+        printf("LRUCacheCreate fail.\n");
+        exit -1;
+    }
+
+    for(int i = 0; i < pattern_table_entries; i++)
+        pattern_table[cpu][i] = 1;
+}
+
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+    size_t hr_val = LRUCacheGet(lruAHRT[cpu], ip);
+    size_t pt_index = 0;
+    uint8_t prediction = 0;
+    if (hr_val)
+    {
+        pt_index = hr_val & history_register_mask;
+        prediction = (pattern_table[cpu][pt_index] >= ((MAX_COUNTER + 1)/2)) ? 1 : 0;
+    }
+    else
+    {
+        LRUCacheSet(lruAHRT[cpu], ip, UINT64_MAX);
+        //LRUCacheSet(lruAHRT[cpu], ip, 0);
+        pt_index = hr_val & history_register_mask;
+        prediction = (pattern_table[cpu][pt_index] >= ((MAX_COUNTER + 1)/2)) ? 1 : 0;
+    }
+    
+    return prediction;
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+    // 按理说这边肯定会有ip对应的entry，所以不做判断，后续出现问题可以进一步补充完善。
+    size_t hr_val = LRUCacheGet(lruAHRT[cpu], ip);
+    size_t pt_index = hr_val & history_register_mask;
+
+    if (taken && (pattern_table[cpu][pt_index] < MAX_COUNTER))
+        pattern_table[cpu][pt_index]++;
+    else if ((taken == 0) && (pattern_table[cpu][pt_index] > 0))
+        pattern_table[cpu][pt_index]--;
+
+    LRUCacheSet(lruAHRT[cpu], ip, (hr_val << 1) + taken);
+}
