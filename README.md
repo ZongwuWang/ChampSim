@@ -138,7 +138,20 @@ There are some other useful metrics printed out at the end of simulation. <br>
 Good luck and be a champion! <br>
 
 
-## gdb调试
+# gdb调试
 
 1. gdb ./bin/<executable>
 2. set args -warmup_instructions 1000000 -simulation_instructions 10000000 -traces dpc3_traces/602.gcc_s-734B.champsimtrace.xz
+
+# batch simulation
+
+**batch_sim.sh:** 用于使用某一分支预测技术(bpName)对所有dpc3_trace进行仿真
+
+使用说明：
+./batch_sim.sh <bpName>
+
+**batch_simEntro.sh:** 需要在ooo_cpu.h中#define ENTROPY，会统计不同trace中任意分支的entropy，然后绘制cdf，保存到ExtractResults文件夹中。
+
+使用说明：
+./batch_simEntro.sh
+

@@ -2,6 +2,7 @@
 #define OOO_CPU_H
 
 #include "cache.h"
+#include <fstream>
 
 #ifdef CRC2_COMPILE
 #define STAT_PRINTING_PERIOD 1000000
@@ -9,6 +10,8 @@
 #define STAT_PRINTING_PERIOD 10000000
 #endif
 #define DEADLOCK_CYCLE 1000000
+
+// #define ENTROPY
 
 using namespace std;
 
@@ -80,7 +83,7 @@ class O3_CPU {
     uint64_t fetch_resume_cycle;
     uint64_t num_branch, branch_mispredictions;
     uint64_t total_rob_occupancy_at_branch_mispredict;
-  uint64_t total_branch_types[8];
+    uint64_t total_branch_types[8];
 
     // TLBs and caches
     CACHE ITLB{"ITLB", ITLB_SET, ITLB_WAY, ITLB_SET*ITLB_WAY, ITLB_WQ_SIZE, ITLB_RQ_SIZE, ITLB_PQ_SIZE, ITLB_MSHR_SIZE},
@@ -213,6 +216,80 @@ class O3_CPU {
     uint8_t predict_branch(uint64_t ip);
     void    initialize_branch_predictor(),
             last_branch_result(uint64_t ip, uint8_t taken);
+    #ifdef ENTROPY
+    double getEntropy(vector<uint8_t> branchVec)
+    {
+        uint8_t phis = 0;
+        uint64_t pItem[8] = {0};
+        double entropy = 0;
+        for (auto it = branchVec.begin(); it != branchVec.end(); ++it)
+        {
+            phis = (phis << 1) + *it;
+            pItem[phis & 7]++;
+        }
+        for (uint64_t i = 0; i < sizeof(pItem)/sizeof(uint64_t); i++)
+        {
+            double prob = pItem[i] / (double)branchVec.size();
+            if (prob != 0)
+            {
+                entropy -= prob * log2(prob);
+            }
+        }
+        return entropy;
+    }
+    map<uint64_t, vector<uint8_t>> branchHistory;
+    void    genEntropyMetaData()
+    {
+        if (NUM_CPUS != 1)
+        {
+            printf("Error: cpu more than one is not supported with ENTROPY defined yet!!!");
+            exit(-1);
+        }
+        ofstream outfile;
+        // Extract log file name
+        char *p[100];
+        int count_str = 0;
+        char fn[1024] = { 0 };
+        p[0] = strtok(trace_string, "/");
+        while (p[count_str] != NULL)
+        {
+            p[++count_str] = strtok(NULL, "/");
+        }
+        strcat(fn, "EntropyRateResults/");
+        strcat(fn, p[count_str-1]);
+        strcat(fn, ".entropy.log");
+        // char *pfn = fn;
+        outfile.open(fn);
+        if (!outfile)
+        {
+            printf("open file{%s} failed!\n", fn);
+            exit(-1);
+        }
+        else
+        {
+            printf("open file{%s} successful!\n", fn);
+        }
+        for (auto it = branchHistory.begin(); it != branchHistory.end(); ++it)
+        {
+            // uint64_t    toggleNum = 0;
+            // double      toggleRate = 0;
+            // uint8_t     prev_token = 0;
+            outfile << "ip{" << it->first << "};\tbranchHistoryLength{" << it->second.size() << "-";
+            // for (auto i : it->second)
+            // {
+            //     // outfile << (unsigned)i << " ";
+            //     toggleNum += (i != prev_token);
+            //     prev_token = i;
+            // }
+            // uint64_t length = it->second.size();
+            // toggleRate = (double)toggleNum/(it->second.size());
+            // outfile << "};\tToggleRate{" << toggleRate << "}" << endl;
+            
+            outfile << "};\tEntropy{" << getEntropy(it->second) << "}" << endl;
+        }
+        outfile.close();
+    }
+    #endif
 
   // code prefetching
   void l1i_prefetcher_initialize();

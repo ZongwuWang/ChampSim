@@ -1,0 +1,29 @@
+#include "ooo_cpu.h"
+
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Alway-Taken branch predictor" << endl;
+}
+
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+    return true;
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+    #ifdef ENTROPY
+    map<uint64_t, vector<uint8_t>>::iterator it = branchHistory.find(ip);
+    if (it == branchHistory.end())
+    {
+        vector<uint8_t> branchVec;
+        branchVec.push_back(taken);
+        branchHistory.insert(pair<uint64_t, vector<uint8_t>>(ip, branchVec));
+    }
+    else
+    {
+        it->second.push_back(taken);
+    }
+    #endif
+}

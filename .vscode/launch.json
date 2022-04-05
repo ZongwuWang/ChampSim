@@ -8,7 +8,7 @@
             "name": "(gdb) 启动",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/bin/my_PAg_IHRT-no-no-no-no-lru-1core",
+            "program": "${workspaceFolder}/bin/calEntropy-no-no-no-no-lru-1core",
             "args": [
 				"-warmup_instructions",
 				"1000000",

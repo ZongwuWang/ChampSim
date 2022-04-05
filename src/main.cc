@@ -1035,6 +1035,10 @@ int main(int argc, char** argv)
     print_dram_stats();
     print_branch_stats();
 #endif
+    
+    for (uint32_t i=0; i<NUM_CPUS; i++) {
+        ooo_cpu[i].genEntropyMetaData();
+    }
 
     return 0;
 }
